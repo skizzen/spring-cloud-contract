@@ -83,16 +83,21 @@ class MethodBuilder {
 			}
 			return new SpockMessagingMethodBodyBuilder(stubContent, configProperties)
 		}
-		if (configProperties.testMode == TestMode.MOCKMVC && configProperties.targetFramework == TestFramework.JUNIT) {
-			return new MockMvcJUnitMethodBodyBuilder(stubContent, configProperties)
-		}
 		if (configProperties.testMode == TestMode.JAXRSCLIENT) {
 			if (configProperties.targetFramework == TestFramework.JUNIT) {
 				return new JaxRsClientJUnitMethodBodyBuilder(stubContent, configProperties)
 			}
 			return new JaxRsClientSpockMethodRequestProcessingBodyBuilder(stubContent, configProperties)
+		} else if (configProperties.testMode == TestMode.EXPLICIT) {
+			if (configProperties.targetFramework == TestFramework.JUNIT) {
+				return new ExplicitJUnitMethodBodyBuilder(stubContent, configProperties)
+			}
+			// in Groovy we're using def so we don't have to update the imports
+			return new MockMvcSpockMethodRequestProcessingBodyBuilder(stubContent, configProperties)
+		} else if (configProperties.targetFramework == TestFramework.SPOCK) {
+			return new MockMvcSpockMethodRequestProcessingBodyBuilder(stubContent, configProperties)
 		}
-		return new MockMvcSpockMethodRequestProcessingBodyBuilder(stubContent, configProperties)
+		return new MockMvcJUnitMethodBodyBuilder(stubContent, configProperties)
 	}
 
 }

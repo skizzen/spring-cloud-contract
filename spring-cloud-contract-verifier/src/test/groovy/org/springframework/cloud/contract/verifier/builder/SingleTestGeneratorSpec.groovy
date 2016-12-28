@@ -18,6 +18,7 @@ package org.springframework.cloud.contract.verifier.builder
 
 import org.junit.Rule
 import org.junit.rules.TemporaryFolder
+import org.mdkt.compiler.InMemoryJavaCompiler
 import org.springframework.cloud.contract.verifier.config.ContractVerifierConfigProperties
 import org.springframework.cloud.contract.verifier.config.TestMode
 import org.springframework.cloud.contract.verifier.file.ContractMetadata
@@ -33,15 +34,27 @@ class SingleTestGeneratorSpec extends Specification {
 	TemporaryFolder tmpFolder = new TemporaryFolder()
 	File file
 
-	static List<String> jUnitClassStrings = ['package test;', 'import com.jayway.jsonpath.DocumentContext;', 'import com.jayway.jsonpath.JsonPath;',
-	                                         'import org.junit.FixMethodOrder;', 'import org.junit.Ignore;', 'import org.junit.Test;', 'import org.junit.runners.MethodSorters;',
-	                                         'import static com.toomuchcoding.jsonassert.JsonAssertion.assertThatJson;', 'import static com.jayway.restassured.module.mockmvc.RestAssuredMockMvc.*;',
-	                                         '@FixMethodOrder(MethodSorters.NAME_ASCENDING)', '@Test', '@Ignore', 'mport com.jayway.restassured.module.mockmvc.specification.MockMvcRequestSpecification;',
-																						'import com.jayway.restassured.response.ResponseOptions;', 'import static org.assertj.core.api.Assertions.assertThat;']
+	private static final List<String> mockMvcJUnitClassStrings = ['package test;', 'import com.jayway.jsonpath.DocumentContext;', 'import com.jayway.jsonpath.JsonPath;',
+																  'import org.junit.FixMethodOrder;', 'import org.junit.Ignore;', 'import org.junit.Test;', 'import org.junit.runners.MethodSorters;',
+																  'import static com.toomuchcoding.jsonassert.JsonAssertion.assertThatJson;', 'import static com.jayway.restassured.module.mockmvc.RestAssuredMockMvc.*;',
+																  '@FixMethodOrder(MethodSorters.NAME_ASCENDING)', '@Test', '@Ignore', 'import com.jayway.restassured.module.mockmvc.specification.MockMvcRequestSpecification;',
+																  'import com.jayway.restassured.response.ResponseOptions;', 'import static org.assertj.core.api.Assertions.assertThat;']
 
-	static List<String> spockClassStrings = ['package test', 'import com.jayway.jsonpath.DocumentContext', 'import com.jayway.jsonpath.JsonPath',
+
+	private static final List<String> explicitJUnitClassStrings = ['package test;', 'import com.jayway.jsonpath.DocumentContext;', 'import com.jayway.jsonpath.JsonPath;',
+																  'import org.junit.FixMethodOrder;', 'import org.junit.Ignore;', 'import org.junit.Test;', 'import org.junit.runners.MethodSorters;',
+																  'import static com.toomuchcoding.jsonassert.JsonAssertion.assertThatJson;', 'import static com.jayway.restassured.RestAssured.*;',
+																  '@FixMethodOrder(MethodSorters.NAME_ASCENDING)', '@Test', '@Ignore', 'import com.jayway.restassured.specification.RequestSpecification;',
+																  'import com.jayway.restassured.response.Response;', 'import static org.assertj.core.api.Assertions.assertThat;']
+
+	private static final List<String> spockClassStrings = ['package test', 'import com.jayway.jsonpath.DocumentContext', 'import com.jayway.jsonpath.JsonPath',
 	                                         'import spock.lang.Ignore', 'import spock.lang.Specification', 'import spock.lang.Stepwise',
 	                                         'import static com.toomuchcoding.jsonassert.JsonAssertion.assertThatJson', 'import static com.jayway.restassured.module.mockmvc.RestAssuredMockMvc.*',
+	                                         '@Stepwise', '@Ignore']
+
+	private static final List<String> explicitSpockClassStrings = ['package test', 'import com.jayway.jsonpath.DocumentContext', 'import com.jayway.jsonpath.JsonPath',
+	                                         'import spock.lang.Ignore', 'import spock.lang.Specification', 'import spock.lang.Stepwise',
+	                                         'import static com.toomuchcoding.jsonassert.JsonAssertion.assertThatJson', 'import static com.jayway.restassured.RestAssured.*',
 	                                         '@Stepwise', '@Ignore']
 
 	def setup() {
@@ -59,7 +72,7 @@ class SingleTestGeneratorSpec extends Specification {
 """)
 	}
 
-	def "should build MockMvc test class for #testFramework"() {
+	def "should build test class for #testFramework"() {
 		given:
 			ContractVerifierConfigProperties properties = new ContractVerifierConfigProperties();
 			properties.targetFramework = testFramework
@@ -73,11 +86,23 @@ class SingleTestGeneratorSpec extends Specification {
 
 		then:
 			classStrings.each { clazz.contains(it) }
-
+		and:
+			asserter(clazz)
 		where:
-			testFramework | classStrings
-			JUNIT         | jUnitClassStrings
-			SPOCK         | spockClassStrings
+			testFramework | mode              | classStrings              | asserter
+			JUNIT         | TestMode.MOCKMVC  | mockMvcJUnitClassStrings  | JAVA_ASSERTER
+			JUNIT         | TestMode.EXPLICIT | explicitJUnitClassStrings | JAVA_ASSERTER
+			SPOCK         | TestMode.MOCKMVC  | spockClassStrings         | GROOVY_ASSERTER
+			SPOCK         | TestMode.EXPLICIT | explicitSpockClassStrings | GROOVY_ASSERTER
+	}
+
+	public static final Closure JAVA_ASSERTER = { String classToTest ->
+		String name = Math.abs(new Random().nextInt())
+		InMemoryJavaCompiler.compile("test.Test${name}", classToTest.replace("public class Test", "public class Test${name}"))
+	}
+
+	public static final Closure GROOVY_ASSERTER = { String classToTest ->
+		new GroovyShell(SingleTestGeneratorSpec.classLoader).parse(classToTest)
 	}
 
 	def "should build JaxRs test class for #testFramework"() {
@@ -142,7 +167,7 @@ class SingleTestGeneratorSpec extends Specification {
 
 		where:
 			testFramework | classStrings
-			JUNIT         | jUnitClassStrings
+			JUNIT         | mockMvcJUnitClassStrings
 			SPOCK         | spockClassStrings
 	}
 
@@ -181,7 +206,7 @@ class SingleTestGeneratorSpec extends Specification {
 
 		where:
 			testFramework | classStrings
-			JUNIT         | jUnitClassStrings
+			JUNIT         | mockMvcJUnitClassStrings
 			SPOCK         | spockClassStrings
 	}
 
