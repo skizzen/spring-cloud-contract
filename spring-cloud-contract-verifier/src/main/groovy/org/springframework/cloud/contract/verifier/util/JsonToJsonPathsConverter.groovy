@@ -58,15 +58,15 @@ class JsonToJsonPathsConverter {
 		}
 	}
 
-	public JsonPaths transformToJsonPathWithTestsSideValues(def json) {
+	JsonPaths transformToJsonPathWithTestsSideValues(def json) {
 		return transformToJsonPathWithValues(json, SERVER_SIDE)
 	}
 
-	public JsonPaths transformToJsonPathWithStubsSideValues(def json) {
+	JsonPaths transformToJsonPathWithStubsSideValues(def json) {
 		return transformToJsonPathWithValues(json, CLIENT_SIDE)
 	}
 
-	public static JsonPaths transformToJsonPathWithStubsSideValuesAndNoArraySizeCheck(def json) {
+	static JsonPaths transformToJsonPathWithStubsSideValuesAndNoArraySizeCheck(def json) {
 		return new JsonToJsonPathsConverter()
 				.transformToJsonPathWithValues(json, CLIENT_SIDE)
 	}
@@ -78,16 +78,27 @@ class JsonToJsonPathsConverter {
 		JsonPaths pathsAndValues = [] as Set
 		Object convertedJson = MapConverter.getClientOrServerSideValues(json, clientSide)
 		Object jsonWithPatterns = ContentUtils.convertDslPropsToTemporaryRegexPatterns(convertedJson)
-		MethodBufferingJsonVerifiable methodBufferingJsonPathVerifiable =
-				new DelegatingJsonVerifiable(JsonAssertion.assertThat(JsonOutput.toJson(jsonWithPatterns)).withoutThrowingException())
-		traverseRecursivelyForKey(jsonWithPatterns, methodBufferingJsonPathVerifiable)
-				 { MethodBufferingJsonVerifiable key, Object value ->
+		traverseWithJsonPaths(jsonWithPatterns) { MethodBufferingJsonVerifiable key, Object value ->
 			if (value instanceof ExecutionProperty || !(key instanceof FinishedDelegatingJsonVerifiable)) {
 				return
 			}
 			pathsAndValues.add(key)
 		}
 		return pathsAndValues
+	}
+
+	/**
+	 * Traverse iteratively over the parsed JSON and execute the closure with key of type
+	 * {@link MethodBufferingJsonVerifiable} and value being the value of the traversed JSON. The
+	 * key contains a JSON path of the given analyzed JSON entry.
+	 *
+	 * @param parsedJson
+	 * @param closure
+	 */
+	def traverseWithJsonPaths(def parsedJson, Closure closure) {
+		MethodBufferingJsonVerifiable methodBufferingJsonPathVerifiable =
+				new DelegatingJsonVerifiable(JsonAssertion.assertThat(JsonOutput.toJson(parsedJson)).withoutThrowingException())
+		return traverseRecursivelyForKey(parsedJson, methodBufferingJsonPathVerifiable, closure)
 	}
 
 	protected def traverseRecursively(Class parentType, MethodBufferingJsonVerifiable key, def value, Closure closure) {
@@ -258,7 +269,7 @@ class JsonToJsonPathsConverter {
 		}
 	}
 
-	private void traverseRecursivelyForKey(def json, MethodBufferingJsonVerifiable rootKey, Closure closure) {
+	private def traverseRecursivelyForKey(def json, MethodBufferingJsonVerifiable rootKey, Closure closure) {
 		traverseRecursively(Map, rootKey, json, closure)
 	}
 
